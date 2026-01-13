@@ -62,6 +62,15 @@ builtin_macros_autodiff_unknown_activity = did not recognize Activity: `{$act}`
 
 builtin_macros_autodiff_width = autodiff width must fit u32, but is {$width}
 
+builtin_macros_batch = batch must be applied to a function
+builtin_macros_batch_missing_config = batch requires at least a name and mode
+builtin_macros_batch_mode = unknown Mode: `{$mode}`. Use `Forward` or `Reverse`
+builtin_macros_batch_mode_activity = {$act} can not be used in {$mode} Mode
+builtin_macros_batch_not_build = this rustc version does not support batch
+builtin_macros_batch_number_activities = expected {$expected} activities, but found {$found}
+builtin_macros_batch_ty_activity = {$act} can not be used for this type
+builtin_macros_batch_unknown_activity = did not recognize Activity: `{$act}`
+
 builtin_macros_avoid_att_syntax = avoid using `.att_syntax`, prefer using `options(att_syntax)` instead
 
 builtin_macros_avoid_intel_syntax = avoid using `.intel_syntax`, Intel syntax is the default

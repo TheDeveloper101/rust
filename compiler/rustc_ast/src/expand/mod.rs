@@ -4,4 +4,5 @@ use rustc_macros::{Decodable, Encodable, HashStable_Generic};
 
 pub mod allocator;
 pub mod autodiff_attrs;
+pub mod batch_attrs;
 pub mod typetree;

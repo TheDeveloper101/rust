@@ -326,6 +326,9 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         [sym::rustc_has_incoherent_inherent_impls, ..] => {
                             self.check_has_incoherent_inherent_impls(attr, span, target)
                         }
+                        [sym::batch, ..] => {
+                            self.check_batch(hir_id, attr, span, target)
+                        }
                         [sym::autodiff_forward, ..] | [sym::autodiff_reverse, ..] => {
                             self.check_autodiff(hir_id, attr, span, target)
                         }
@@ -1838,6 +1841,18 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     export_name_attr,
                 },
             );
+        }
+    }
+
+    // Checks if `#[batch]` is applied to an item other than a function item.
+    fn check_batch(&self, _hir_id: HirId, _attr: &Attribute, span: Span, target: Target) {
+        debug!("check_batch");
+        match target {
+            Target::Fn => {}
+            _ => {
+                self.dcx().emit_err(errors::BatchAttr { attr_span: span });
+                self.abort.set(true);
+            }
         }
     }
 

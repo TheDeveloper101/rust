@@ -6,6 +6,7 @@
 #![allow(rustc::diagnostic_outside_of_impl)]
 #![allow(rustc::untranslatable_diagnostic)]
 #![feature(assert_matches)]
+#![cfg_attr(not(bootstrap), feature(batch))]
 #![feature(box_patterns)]
 #![feature(decl_macro)]
 #![feature(if_let_guard)]
@@ -27,6 +28,7 @@ use crate::deriving::*;
 mod alloc_error_handler;
 mod assert;
 mod autodiff;
+mod batch;
 mod cfg;
 mod cfg_accessible;
 mod cfg_eval;
@@ -112,6 +114,7 @@ pub fn register_builtin_macros(resolver: &mut dyn ResolverExpand) {
         alloc_error_handler: alloc_error_handler::expand,
         autodiff_forward: autodiff::expand_forward,
         autodiff_reverse: autodiff::expand_reverse,
+        batch: batch::expand,
         bench: test::expand_bench,
         cfg_accessible: cfg_accessible::Expander,
         cfg_eval: cfg_eval::expand,
