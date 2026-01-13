@@ -24,6 +24,13 @@ pub(crate) struct IncorrectDoNotRecommendLocation;
 #[diag(passes_incorrect_do_not_recommend_args)]
 pub(crate) struct DoNotRecommendDoesNotExpectArgs;
 
+#[diag(passes_batch_attr)]
+pub(crate) struct BatchAttr {
+    #[primary_span]
+    #[label]
+    pub attr_span: Span,
+}
+
 #[derive(Diagnostic)]
 #[diag(passes_autodiff_attr)]
 pub(crate) struct AutoDiffAttr {

@@ -38,6 +38,11 @@ passes_autodiff_attr =
     `#[autodiff]` should be applied to a function
     .label = not a function
 
+passes_batch_attr =
+    `#[batch]` should be applied to a function
+    .label = not a function
+
+
 passes_both_ffi_const_and_pure =
     `#[ffi_const]` function cannot be `#[ffi_pure]`
 

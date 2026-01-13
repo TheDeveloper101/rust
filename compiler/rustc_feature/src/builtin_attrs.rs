@@ -1119,6 +1119,11 @@ pub static BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         EncodeCrossCrate::Yes, "used internally for testing macro hygiene",
     ),
     rustc_attr!(
+        rustc_batch, Normal,
+        template!(Word, List: r#""...""#), DuplicatesOk,
+        EncodeCrossCrate::No, INTERNAL_UNSTABLE
+    ),
+    rustc_attr!(
         rustc_autodiff, Normal,
         template!(Word, List: &[r#""...""#]), DuplicatesOk,
         EncodeCrossCrate::Yes,
