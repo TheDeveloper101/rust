@@ -498,7 +498,9 @@ mod llvm_enzyme {
                     // [T; N] becomes [T; N * width]
                     // T becomes [T; width]
                     // For now we assume we have a slice or vec.
-                    d_inputs.push(arg.clone());
+                    let mut leaf_arg = arg.clone();
+                    leaf_arg.ty = P(widen_ty_leaf(arg.ty.as_ref(), x.width, span));
+                    d_inputs.push(leaf_arg);
                 }
                 BatchActivity::Const => {
                     // Nothing special to do here.
@@ -534,6 +536,192 @@ mod llvm_enzyme {
         let d_sig = FnSig { header: d_header, decl: d_decl, span };
         trace!("Generated signature: {:?}", d_sig);
         (d_sig, new_inputs, idents, false)
+    }
+
+    /// For Leaf activity, widen the type by width:
+    /// - [T; N]  ->  [T; N*width]
+    /// - T       ->  [T; width]
+    /// - &[T]    ->  &[T; width]
+    /// - &[T; N] ->  &[T; N*width]
+    fn widen_ty_leaf(ty: &ast::Ty, width: usize, span: Span) -> ast::Ty {
+        match &ty.kind {
+            // [T; N] -> [T; N * width]
+            TyKind::Array(inner_ty, len_expr) => {
+                let width_lit = ast::LitKind::Int(
+                    (width as u128).into(),
+                    ast::LitIntType::Unsuffixed,
+                );
+                let width_expr_kind = ast::ExprKind::Lit(
+                    ast::token::Lit::new(
+                        ast::token::LitKind::Integer,
+                        rustc_span::Symbol::intern(&width.to_string()),
+                        None,
+                    )
+                );
+                let orig_expr = len_expr.value.clone(); 
+                let mul_expr = ast::Expr {
+                    id: ast::DUMMY_NODE_ID,
+                    kind: ast::ExprKind::Binary(
+                        rustc_span::source_map::Spanned { node: ast::BinOpKind::Mul, span },
+                        P(orig_expr),
+                        P(ast::Expr {
+                            id: ast::DUMMY_NODE_ID,
+                            kind: width_expr_kind,
+                            span,
+                            attrs: thin_vec![],
+                            tokens: None,
+                        }),
+                    ),
+                    span,
+                    attrs: thin_vec![],
+                    tokens: None,
+                };
+                let new_len = ast::AnonConst {
+                    id: ast::DUMMY_NODE_ID,
+                    value: P(mul_expr),
+                    mgca_disambiguation: rustc_ast::MgcaDisambiguation::AnonConst,
+                };
+                ast::Ty {
+                    id: ty.id,
+                    kind: TyKind::Array(inner_ty.clone(), new_len),
+                    span,
+                    tokens: None,
+                }
+            }
+
+            TyKind::Ref(lifetime, mut_ty) => {
+                match &mut_ty.ty.kind {
+                    TyKind::Slice(inner_ty) => {
+                        let width_const = make_width_anon_const(width, span);
+                        let array_ty = P(ast::Ty {
+                            id: ast::DUMMY_NODE_ID,
+                            kind: TyKind::Array(inner_ty.clone(), width_const),
+                            span,
+                            tokens: None,
+                        });
+                        let new_mut_ty = ast::MutTy { ty: array_ty, mutbl: mut_ty.mutbl };
+                        ast::Ty {
+                            id: ast::DUMMY_NODE_ID,
+                            kind: TyKind::Ref(lifetime.clone(), new_mut_ty),
+                            span,
+                            tokens: None,
+                        }
+                    }
+
+                    TyKind::Array(inner_ty, len_expr) => {
+                        let new_len = make_multiplied_anon_const(&len_expr.value, width, span);
+                        let array_ty = P(ast::Ty {
+                            id: ast::DUMMY_NODE_ID,
+                            kind: TyKind::Array(inner_ty.clone(), new_len),
+                            span,
+                            tokens: None,
+                        });
+                        let new_mut_ty = ast::MutTy { ty: array_ty, mutbl: mut_ty.mutbl };
+                        ast::Ty {
+                            id: ast::DUMMY_NODE_ID,
+                            kind: TyKind::Ref(lifetime.clone(), new_mut_ty),
+                            span,
+                            tokens: None,
+                        }
+                    }
+                    _ => ty.clone(),
+                }
+            }
+
+            TyKind::Slice(inner_ty) => {
+                let width_const = make_width_anon_const(width, span);
+                ast::Ty {
+                    id: ast::DUMMY_NODE_ID,
+                    kind: TyKind::Array(inner_ty.clone(), width_const),
+                    span,
+                    tokens: None,
+                }
+            }
+            TyKind::Path(_, _) => ty.clone(),
+            // Scalar T -> [T; width]
+            _ => {
+                let width_lit_expr = ast::AnonConst {
+                    id: ast::DUMMY_NODE_ID,
+                    value: P(ast::Expr {
+                        id: ast::DUMMY_NODE_ID,
+                        kind: ast::ExprKind::Lit(
+                            ast::token::Lit::new(
+                                ast::token::LitKind::Integer,
+                                rustc_span::Symbol::intern(&width.to_string()),
+                                None,
+                            )
+                        ),
+                        span,
+                        attrs: thin_vec![],
+                        tokens: None,
+                    }),
+                    mgca_disambiguation: rustc_ast::MgcaDisambiguation::AnonConst,
+                };
+                ast::Ty {
+                    id: ast::DUMMY_NODE_ID,
+                    kind: TyKind::Array(P(ty.clone()), width_lit_expr),
+                    span,
+                    tokens: None,
+                }
+            }
+        }
+    }
+
+    /// Builds an AnonConst for a plain integer literal: just `width`
+    fn make_width_anon_const(width: usize, span: Span) -> ast::AnonConst {
+        ast::AnonConst {
+            id: ast::DUMMY_NODE_ID,
+            value: P(ast::Expr {
+                id: ast::DUMMY_NODE_ID,
+                kind: ast::ExprKind::Lit(ast::token::Lit::new(
+                    ast::token::LitKind::Integer,
+                    rustc_span::Symbol::intern(&width.to_string()),
+                    None,
+                )),
+                span,
+                attrs: thin_vec![],
+                tokens: None,
+            }),
+            mgca_disambiguation: rustc_ast::MgcaDisambiguation::AnonConst,
+        }
+    }
+
+    /// Builds an AnonConst for `(original_expr) * width`
+    fn make_multiplied_anon_const(orig: &ast::Expr, width: usize, span: Span) -> ast::AnonConst {
+        let width_expr = P(ast::Expr {
+            id: ast::DUMMY_NODE_ID,
+            kind: ast::ExprKind::Lit(ast::token::Lit::new(
+                ast::token::LitKind::Integer,
+                rustc_span::Symbol::intern(&width.to_string()),
+                None,
+            )),
+            span,
+            attrs: thin_vec![],
+            tokens: None,
+        });
+
+        let paren_orig = P(ast::Expr {
+            id: ast::DUMMY_NODE_ID,
+            kind: ast::ExprKind::Paren(P(orig.clone())),
+            span,
+            attrs: thin_vec![],
+            tokens: None,
+        });
+        ast::AnonConst {
+            id: ast::DUMMY_NODE_ID,
+            value: P(ast::Expr {
+                id: ast::DUMMY_NODE_ID,
+                kind: ast::ExprKind::Binary(
+                    rustc_span::source_map::Spanned { node: ast::BinOpKind::Mul, span },
+                    paren_orig,
+                    width_expr,
+                ),
+                span,
+                attrs: thin_vec![],
+                tokens: None,
+            }),
+            mgca_disambiguation: rustc_ast::MgcaDisambiguation::AnonConst,
+        }
     }
 }
 
