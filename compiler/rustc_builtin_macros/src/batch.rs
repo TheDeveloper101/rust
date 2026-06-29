@@ -225,6 +225,10 @@ mod llvm_enzyme {
             sig: d_sig,
             generics: Generics::default(),
             body: Some(d_body),
+            ident: idents[0],
+            contract: None,
+            define_opaque: None,
+            eii_impls: thin_vec![],
         });
         let mut rustc_batch_attr =
             P(ast::NormalAttr::from_ident(Ident::with_dummy_span(sym::rustc_batch)));
@@ -304,7 +308,6 @@ mod llvm_enzyme {
                 id: ast::DUMMY_NODE_ID,
                 span,
                 vis,
-                ident: d_ident,
                 kind: assoc_item,
                 tokens: None,
             });
@@ -312,7 +315,6 @@ mod llvm_enzyme {
         } else {
             let mut d_fn = ecx.item(
                 span,
-                d_ident,
                 thin_vec![d_attr.clone(), inline_never],
                 ItemKind::Fn(asdf),
             );
@@ -364,7 +366,6 @@ mod llvm_enzyme {
             tokens: None,
             rules: unsf,
             span,
-            could_be_bare_literal: false,
         };
         let unsf_expr = ecx.expr_block(P(unsf_block));
         let blackbox_call_expr = ecx.expr_path(ecx.path(span, blackbox_path));
@@ -541,8 +542,6 @@ mod llvm_enzyme {
     /// For Leaf activity, widen the type by width:
     /// - [T; N]  ->  [T; N*width]
     /// - T       ->  [T; width]
-    /// - &[T]    ->  &[T; width]
-    /// - &[T; N] ->  &[T; N*width]
     fn widen_ty_leaf(ty: &ast::Ty, width: usize, span: Span) -> ast::Ty {
         match &ty.kind {
             // [T; N] -> [T; N * width]
@@ -589,44 +588,7 @@ mod llvm_enzyme {
                 }
             }
 
-            TyKind::Ref(lifetime, mut_ty) => {
-                match &mut_ty.ty.kind {
-                    TyKind::Slice(inner_ty) => {
-                        let width_const = make_width_anon_const(width, span);
-                        let array_ty = P(ast::Ty {
-                            id: ast::DUMMY_NODE_ID,
-                            kind: TyKind::Array(inner_ty.clone(), width_const),
-                            span,
-                            tokens: None,
-                        });
-                        let new_mut_ty = ast::MutTy { ty: array_ty, mutbl: mut_ty.mutbl };
-                        ast::Ty {
-                            id: ast::DUMMY_NODE_ID,
-                            kind: TyKind::Ref(lifetime.clone(), new_mut_ty),
-                            span,
-                            tokens: None,
-                        }
-                    }
-
-                    TyKind::Array(inner_ty, len_expr) => {
-                        let new_len = make_multiplied_anon_const(&len_expr.value, width, span);
-                        let array_ty = P(ast::Ty {
-                            id: ast::DUMMY_NODE_ID,
-                            kind: TyKind::Array(inner_ty.clone(), new_len),
-                            span,
-                            tokens: None,
-                        });
-                        let new_mut_ty = ast::MutTy { ty: array_ty, mutbl: mut_ty.mutbl };
-                        ast::Ty {
-                            id: ast::DUMMY_NODE_ID,
-                            kind: TyKind::Ref(lifetime.clone(), new_mut_ty),
-                            span,
-                            tokens: None,
-                        }
-                    }
-                    _ => ty.clone(),
-                }
-            }
+            TyKind::Ref(_, _) => ty.clone(),
 
             TyKind::Slice(inner_ty) => {
                 let width_const = make_width_anon_const(width, span);
